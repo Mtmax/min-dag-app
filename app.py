@@ -64,9 +64,12 @@ if "anvandare" not in st.session_state:
     st.session_state.anvandare = None
 if "visa_bekraftelse" not in st.session_state:
     st.session_state["visa_bekraftelse"] = False
-st.title("👵 Min dag")
-sida = st.selectbox("Navigera", ["Hem", "Vatten", "Promenad", "Veckovy (kommande)", "Avsluta"])
-
+st.title("🍀 Min dag")
+if st.session_state.anvandare:
+    sida = st.selectbox("Navigera", ["Hem", "Vatten", "Promenad", "Veckovy (kommande)", "Avsluta"])
+else:
+    sida = "Hem"
+    
 if st.session_state.anvandare is None:
     st.subheader("Ange ditt namn:")
     namn_input_raw = st.text_input("", key="namn_input", placeholder="Ange ditt namn", label_visibility="collapsed")
@@ -148,9 +151,13 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
     data = ladda_data(anv)
     
     st.header(f"Hej, {st.session_state.anvandare.capitalize()}!")
+    veckodagar = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
+    idag = date.today()
+    veckodag = veckodagar[idag.weekday()]
+    st.markdown(f"**Idag är det {veckodag} den {idag.day} {idag.strftime('%B').capitalize()}**")
 
     if sida == "Hem":
-        st.markdown("### 📊 Sammanställning för idag")
+        st.markdown("### Sammanställning för idag")
 
         st.markdown(f"### 💧 Vatten")
         st.markdown(f"**Du har druckit {data['vatten']} glas av {VATTENMÅL_DL // 2}**")
@@ -281,15 +288,28 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
                 st.session_state["visa_bekraftelse"] = False
                 st.rerun()
     elif sida == "Veckovy (kommande)":
-        st.subheader("📅 Veckovy")
+        st.subheader("📅 Veckosammanställning")
 
-        if "veckodata" in data:
-            st.markdown("#### Sammanställning senaste dagarna:")
-            for d in sorted(data["veckodata"].keys(), reverse=True)[-7:]:
-                daginfo = data["veckodata"][d]
-                st.markdown(f"📆 **{d}**")
-                st.markdown(f"- 💧 {daginfo.get('vatten', 0)} glas vatten")
-                st.markdown(f"- 🚶 {daginfo.get('promenad', 0)} min promenad")
+        if "veckodata" in data and data["veckodata"]:
+            st.markdown("#### Senaste 7 dagarna:")
+
+            senaste_dagar = sorted(data["veckodata"].keys(), reverse=True)[-7:]
+            senaste_dagar.sort()  # Sortera i stigande datumordning
+
+            for dag in senaste_dagar:
+                daginfo = data["veckodata"][dag]
+                vatten = daginfo.get("vatten", 0)
+                promenad = daginfo.get("promenad", 0)
+                tider_vatten = ", ".join(daginfo.get("vatten_tid", []))
+                tider_promenad = ", ".join(daginfo.get("promenad_tid", []))
+
+                st.markdown(f"### 📆 {dag}")
+                st.markdown(f"- 💧 **{vatten} glas vatten**")
+                if tider_vatten:
+                    st.markdown(f"  - Tider: {tider_vatten}")
+                st.markdown(f"- 🚶 **{promenad} minuter promenad**")
+                if tider_promenad:
+                    st.markdown(f"  - Tider: {tider_promenad}")
                 st.divider()
         else:
             st.info("Ingen veckodata sparad än. Kom tillbaka efter några dagars användning.")
