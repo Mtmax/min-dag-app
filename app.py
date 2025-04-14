@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 from datetime import datetime, date
+import pytz
 
 # Mapp för användardata
 DATA_DIR = "anv_data"
@@ -26,6 +27,10 @@ def ladda_anvandare():
 def spara_anvandare(anvandare):
     with open(USERS_FILE, "w") as f:
         json.dump(anvandare, f)
+
+def nu_svensk_tid():
+    svensk_tz = pytz.timezone("Europe/Stockholm")
+    return datetime.now(svensk_tz)
 
 GODKÄNDA_ANVÄNDARE = ladda_anvandare() or {}
 
@@ -60,6 +65,13 @@ def spara_data(anv, data):
 
 # --- Startgränssnitt ---
 st.set_page_config(page_title="Min dag", layout="centered", initial_sidebar_state="collapsed")
+st.markdown("""
+    <style>
+    button:hover, button:focus, button:active {
+        color: inherit !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 if "anvandare" not in st.session_state:
     st.session_state.anvandare = None
 if "visa_bekraftelse" not in st.session_state:
@@ -157,9 +169,23 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
     st.markdown(f"**Idag är det {veckodag} den {idag.day} {idag.strftime('%B').capitalize()}**")
 
     if sida == "Hem":
-        st.markdown("### Sammanställning för idag")
+        col1, col2 = st.columns(2)
 
-        st.markdown(f"### 💧 Vatten")
+        with col1:
+            if st.button("💧 Jag drack ett glas", key="hem_vatten", use_container_width=True):
+                data["vatten_tid"].append(nu_svensk_tid().strftime("%H:%M"))
+                data["vatten"] += 1
+                spara_data(anv, data)
+                st.success("Du har registrerat ett glas vatten!")
+
+        with col2:
+            if st.button("🚶 Jag tog en promenad", key="hem_promenad", use_container_width=True):
+                data["promenad_tid"].append(nu_svensk_tid().strftime("%H:%M"))
+                data["promenad"] += 10
+                spara_data(anv, data)
+                st.success("Du har registrerat en promenad!")
+
+        st.markdown("### 💧 Vatten")
         st.markdown(f"**Du har druckit {data['vatten']} glas av {VATTENMÅL_DL // 2}**")
         st.progress(min(data['vatten'] / (VATTENMÅL_DL // 2), 1.0))
 
@@ -189,7 +215,7 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
         if st.button("Jag drack ett glas", use_container_width=True):
             if "vatten_tid" not in data:
                 data["vatten_tid"] = []
-            data["vatten_tid"].append(datetime.now().strftime("%H:%M"))
+            data["vatten_tid"].append(nu_svensk_tid().strftime("%H:%M"))
             data["vatten"] += 1
             spara_data(anv, data)
             st.success("Du har registrerat att du druckit vatten idag.")
@@ -245,7 +271,7 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
                 minut_val = 30  # Sätter till 30 om användaren väljer detta alternativ
             if "promenad_tid" not in data:
                 data["promenad_tid"] = []
-            data["promenad_tid"].append(datetime.now().strftime("%H:%M"))
+            data["promenad_tid"].append(nu_svensk_tid().strftime("%H:%M"))
             data["promenad"] += minut_val
             data["streak"] += 1 if data["promenad"] == minut_val else 0
             spara_data(anv, data)
@@ -340,3 +366,4 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
             "streak": 0,
             "veckodata": {}
         }
+        spara_data(anv, data)
