@@ -45,6 +45,7 @@ def lagg_till_anvandare(namn):
 
 # --- Hjälpfunktioner ---
 def ladda_data(anv):
+    os.makedirs(DATA_DIR, exist_ok=True)
     filnamn = os.path.join(DATA_DIR, f"{anv}.json")
     if os.path.exists(filnamn):
         with open(filnamn, "r") as f:
@@ -62,6 +63,9 @@ def ladda_data(anv):
 }
 
 def spara_data(anv, data):
+    # Uppdatera alltid datum när vi sparar
+    from datetime import date
+    data["datum"] = str(date.today())
     filnamn = os.path.join(DATA_DIR, f"{anv}.json")
     with open(filnamn, "w") as f:
         json.dump(data, f)
@@ -164,6 +168,26 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
                 st.rerun()
 
     data = ladda_data(anv)
+    # Arkivera gårdagens data och återställ endast en gång per session
+    if "initialized" not in st.session_state:
+        if data["datum"] != str(date.today()):
+            dagens_datum = data["datum"]
+            data.setdefault("veckodata", {})[dagens_datum] = {
+                "vatten": data.get("vatten", 0),
+                "vatten_tid": data.get("vatten_tid", []),
+                "promenad": data.get("promenad", 0),
+                "promenad_tid": data.get("promenad_tid", [])
+            }
+            # Nollställ dagens data
+            data.update({
+                "vatten": 0,
+                "vatten_tid": [],
+                "promenad": 0,
+                "promenad_tid": [],
+                "streak": 0
+            })
+            spara_data(anv, data)
+        st.session_state["initialized"] = True
     
     st.header(f"Hej, {st.session_state.anvandare.capitalize()}!")
     veckodagar = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
@@ -421,25 +445,3 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
                     del st.session_state["edit_fodelsedag_index"]
                     st.rerun()
 
-    spara_data(anv, data)
-
-    if data["datum"] != str(date.today()):
-        dagens_datum = data["datum"]
-        if "veckodata" not in data:
-            data["veckodata"] = {}
-        data["veckodata"][dagens_datum] = {
-            "vatten": data["vatten"],
-            "vatten_tid": data["vatten_tid"],
-            "promenad": data["promenad"],
-            "promenad_tid": data["promenad_tid"]
-        }
-        data = {
-            "datum": str(date.today()),
-            "vatten": 0,
-            "vatten_tid": [],
-            "promenad": 0,
-            "promenad_tid": [],
-            "streak": 0,
-            "veckodata": {}
-        }
-        spara_data(anv, data)
