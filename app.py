@@ -3,6 +3,8 @@ import json
 import os
 from datetime import datetime, date
 import pytz
+import calendar
+import streamlit.components.v1 as components
 
 # Mapp för användardata
 DATA_DIR = "anv_data"
@@ -55,8 +57,9 @@ def ladda_data(anv):
             "promenad": 0,
             "promenad_tid": [],
             "streak": 0,
-            "veckodata": {}
-        }
+            "veckodata": {},
+            "fodelsedagar": []  # 👈 detta är nytt
+}
 
 def spara_data(anv, data):
     filnamn = os.path.join(DATA_DIR, f"{anv}.json")
@@ -78,7 +81,7 @@ if "visa_bekraftelse" not in st.session_state:
     st.session_state["visa_bekraftelse"] = False
 st.title("🍀 Min dag")
 if st.session_state.anvandare:
-    sida = st.selectbox("Navigera", ["Hem", "Vatten", "Promenad", "Veckovy (kommande)", "Avsluta"])
+    sida = st.selectbox("Navigera", ["Hem", "Vatten", "Promenad", "Födelsedagar", "Veckovy (kommande)", "Avsluta"])
 else:
     sida = "Hem"
     
@@ -169,45 +172,50 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
     st.markdown(f"**Idag är det {veckodag} den {idag.day} {idag.strftime('%B').capitalize()}**")
 
     if sida == "Hem":
-        col1, col2 = st.columns(2)
+        st.subheader("📊 Sammanställning för idag")
+        if data["vatten"] > 0 or data["promenad"] > 0:
+            if data["vatten"] > 0:
+                tider_vatten = ", ".join(data["vatten_tid"])
+                st.markdown(f"- 💧 **{data['vatten']} glas vatten**")
+                st.markdown(f"  - Tider: {tider_vatten}")
+            if data["promenad"] > 0:
+                tider_promenad = ", ".join(data["promenad_tid"])
+                st.markdown(f"- 🚶 **{data['promenad']} minuter promenad**")
+                st.markdown(f"  - Tider: {tider_promenad}")
+        else:
+            st.info("Ingen registrering ännu för idag.")
 
-        with col1:
-            if st.button("💧 Jag drack ett glas", key="hem_vatten", use_container_width=True):
-                data["vatten_tid"].append(nu_svensk_tid().strftime("%H:%M"))
-                data["vatten"] += 1
-                spara_data(anv, data)
-                st.success("Du har registrerat ett glas vatten!")
-
-        with col2:
-            if st.button("🚶 Jag tog en promenad", key="hem_promenad", use_container_width=True):
-                data["promenad_tid"].append(nu_svensk_tid().strftime("%H:%M"))
-                data["promenad"] += 10
-                spara_data(anv, data)
-                st.success("Du har registrerat en promenad!")
-
-        st.markdown("### 💧 Vatten")
-        st.markdown(f"**Du har druckit {data['vatten']} glas av {VATTENMÅL_DL // 2}**")
-        st.progress(min(data['vatten'] / (VATTENMÅL_DL // 2), 1.0))
-
-        if data['vatten'] >= VATTENMÅL_DL // 2:
-            st.success("💧 Du har klarat vattenmålet för idag!")
-
-        if "vatten_tid" in data and data['vatten_tid']:
-            tider = ", ".join(data['vatten_tid'])
-            st.markdown(f"🔘 **Du drack klockan:** {tider}")
-
-        st.divider()
-
-        st.markdown(f"### 🚶 Promenad")
-        st.markdown(f"**Du har promenerat {data['promenad']} minuter av {PROMENADMÅL_MINUTER}**")
-        st.progress(min(data['promenad'] / PROMENADMÅL_MINUTER, 1.0))
-
-        if data['promenad'] >= PROMENADMÅL_MINUTER:
-            st.success("🚶 Du har klarat promenadmålet för idag!")
-
-        if "promenad_tid" in data and data['promenad_tid']:
-            tider = ", ".join(data['promenad_tid'])
-            st.markdown(f"🕒 **Du gick klockan:** {tider}")
+        if "fodelsedagar" in data and data["fodelsedagar"]:
+            st.markdown("### 🎂 Kommande födelsedagar")
+            idag = date.today()
+            kommande = []
+            visade = set()
+ 
+            for f in data["fodelsedagar"]:
+                namn = f["namn"]
+                datum = datetime.strptime(f["datum"], "%Y-%m-%d").date()
+                datum_i_ar = datum.replace(year=idag.year)
+                if datum_i_ar < idag:
+                    datum_i_ar = datum_i_ar.replace(year=idag.year + 1)
+                dagar_kvar = (datum_i_ar - idag).days
+                alder = datum_i_ar.year - datum.year
+                veckodag = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"][datum_i_ar.weekday()]
+                manad = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"][datum_i_ar.month - 1]
+                nyckel = (namn, datum_i_ar)
+ 
+                if nyckel not in visade:
+                    visade.add(nyckel)
+                    if dagar_kvar == 0:
+                        st.success(f"🎉 Idag fyller {namn} {alder} år!")
+                    elif dagar_kvar == 5:
+                        st.info(f"🔔 Om 5 dagar fyller {namn} {alder} år ({veckodag} den {datum_i_ar.day} {manad})")
+                    else:
+                        text = f"{namn} fyller {alder} år {veckodag} den {datum_i_ar.day} {manad} (om {dagar_kvar} dagar)"
+                        kommande.append((dagar_kvar, text))
+ 
+            kommande.sort()
+            for _, text in kommande:
+                st.markdown(f"- {text}")
     elif sida == "Vatten":
         st.subheader("💧 Har du druckit vatten?")
         st.info("Ditt mål är 2 liter = 10 glas")
@@ -315,35 +323,103 @@ if anv is not None and anv in GODKÄNDA_ANVÄNDARE:
                 st.rerun()
     elif sida == "Veckovy (kommande)":
         st.subheader("📅 Veckosammanställning")
+    elif sida == "Födelsedagar":
+        st.subheader("🎂 Födelsedagar")
+        st.markdown("Lägg till en födelsedag i formatet `Namn, YYYY-MM-DD`.")
+        ny_fodelsedag = st.text_input("Ny födelsedag")
+        if ny_fodelsedag:
+            try:
+                namn, datum_str = [s.strip() for s in ny_fodelsedag.split(",")]
+                datetime.strptime(datum_str, "%Y-%m-%d")  # validera
+                if "fodelsedagar" not in data:
+                    data["fodelsedagar"] = []
+                redan_finns = any(fd["namn"] == namn and fd["datum"] == datum_str for fd in data["fodelsedagar"])
+                if redan_finns:
+                    st.warning(f"{namn}s födelsedag är redan tillagd.")
+                else:
+                    redan_finns = any(fd["namn"] == namn and fd["datum"] == datum_str for fd in data["fodelsedagar"])
+                    if redan_finns:
+                        st.warning(f"{namn}s födelsedag är redan tillagd.")
+                    else:
+                        data["fodelsedagar"].append({"namn": namn, "datum": datum_str})
+                        spara_data(anv, data)
+                        st.success(f"{namn}s födelsedag har lagts till!")
+                        st.rerun()
+            except Exception:
+                st.warning("Fel format. Använd Namn, YYYY-MM-DD.")
 
-        if "veckodata" in data and data["veckodata"]:
-            st.markdown("#### Senaste 7 dagarna:")
+        # Ta bort eventuella dubbletter i data["fodelsedagar"]
+        if "fodelsedagar" in data:
+            seen = set()
+            unique_birthdays = []
+            for fd in data["fodelsedagar"]:
+                key = (fd["namn"], fd["datum"])
+                if key not in seen:
+                    seen.add(key)
+                    unique_birthdays.append(fd)
+            if len(unique_birthdays) != len(data["fodelsedagar"]):
+                data["fodelsedagar"] = unique_birthdays
+                spara_data(anv, data)
+        if "fodelsedagar" in data:
+            idag = date.today()
+            kommande = []
 
-            senaste_dagar = sorted(data["veckodata"].keys(), reverse=True)[-7:]
-            senaste_dagar.sort()  # Sortera i stigande datumordning
+            for i, f in enumerate(data["fodelsedagar"]):
+                namn = f["namn"]
+                datum = datetime.strptime(f["datum"], "%Y-%m-%d").date()
+                datum_i_ar = datum.replace(year=idag.year)
+                if datum_i_ar < idag:
+                    datum_i_ar = datum_i_ar.replace(year=idag.year + 1)
 
-            for dag in senaste_dagar:
-                daginfo = data["veckodata"][dag]
-                vatten = daginfo.get("vatten", 0)
-                promenad = daginfo.get("promenad", 0)
-                tider_vatten = ", ".join(daginfo.get("vatten_tid", []))
-                tider_promenad = ", ".join(daginfo.get("promenad_tid", []))
+                dagar_kvar = (datum_i_ar - idag).days
+                alder = datum_i_ar.year - datum.year
+                veckodag = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"][datum_i_ar.weekday()]
+                manad = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"][datum_i_ar.month - 1]
 
-                st.markdown(f"### 📆 {dag}")
-                st.markdown(f"- 💧 **{vatten} glas vatten**")
-                if tider_vatten:
-                    st.markdown(f"  - Tider: {tider_vatten}")
-                st.markdown(f"- 🚶 **{promenad} minuter promenad**")
-                if tider_promenad:
-                    st.markdown(f"  - Tider: {tider_promenad}")
-                st.divider()
-        else:
-            st.info("Ingen veckodata sparad än. Kom tillbaka efter några dagars användning.")
-    elif sida == "Avsluta":
-        st.warning("Du har valt att avsluta. Du kan stänga fliken eller välja en annan funktion.")
-        if st.button("Logga ut", use_container_width=True):
-            del st.session_state["anvandare"]
-            st.rerun()
+                if dagar_kvar == 0:
+                    st.success(f"🎉 Idag fyller {namn} {alder} år!")
+                elif dagar_kvar == 5:
+                    st.info(f"🔔 Om 5 dagar fyller {namn} {alder} år ({veckodag} den {datum_i_ar.day} {manad})")
+                else:
+                    kommande.append((dagar_kvar, namn, alder, veckodag, datum_i_ar, f["datum"]))
+
+            if kommande:
+                kommande.sort()
+                st.markdown("#### Kommande födelsedagar")
+                for i, (dagar, namn, alder, veckodag, datum_i_ar, datum_str) in enumerate(kommande):
+                    manad = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"][datum_i_ar.month - 1]
+                    datumtext = f"{veckodag} den {datum_i_ar.day} {manad}"
+                    st.markdown(f"- {namn} fyller {alder} år {datumtext} (om {dagar} dagar)")
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        if st.button(f"✏️ Redigera", key=f"edit_bday_{i}"):
+                            st.session_state["edit_fodelsedag_index"] = i
+                    with col2:
+                        if st.button(f"❌ Ta bort", key=f"delete_bday_{i}"):
+                            data["fodelsedagar"] = [fd for fd in data["fodelsedagar"] if not (fd["namn"] == namn and fd["datum"] == datum_str)]
+                            spara_data(anv, data)
+                            st.success(f"Födelsedag för {namn} borttagen.")
+                            st.rerun()
+
+        if "edit_fodelsedag_index" in st.session_state:
+            idx = st.session_state["edit_fodelsedag_index"]
+            if idx < len(data["fodelsedagar"]):
+                fd = data["fodelsedagar"][idx]
+                nytt_namn = st.text_input("Redigera namn:", value=fd["namn"], key="edit_namn")
+                nytt_datum = st.text_input("Redigera datum (YYYY-MM-DD):", value=fd["datum"], key="edit_datum")
+                if st.button("💾 Spara ändringar"):
+                    try:
+                        datetime.strptime(nytt_datum, "%Y-%m-%d")  # validera
+                        data["fodelsedagar"][idx] = {"namn": nytt_namn, "datum": nytt_datum}
+                        spara_data(anv, data)
+                        st.success("Födelsedag uppdaterad.")
+                        del st.session_state["edit_fodelsedag_index"]
+                        st.rerun()
+                    except Exception:
+                        st.warning("Fel datumformat. Använd YYYY-MM-DD.")
+                if st.button("❌ Avbryt ändring"):
+                    del st.session_state["edit_fodelsedag_index"]
+                    st.rerun()
 
     spara_data(anv, data)
 
